@@ -29,6 +29,12 @@ Use the same project URL and publishable key for the server and browser variable
 
 Database migrations are in `drizzle/migrations`. Apply the required migrations to the Supabase project before using authenticated data features.
 
+## Authentication provider setup
+
+- To send an email code instead of a magic link, open Supabase **Authentication → Email Templates → Magic Link or OTP** and make the message include `{{ .Token }}`. Supabase's default magic-link template sends a link.
+- For phone OTP, enable **Phone** in **Authentication → Sign In / Providers → Auth Providers**, then configure an SMS provider (such as Twilio) and its credentials. The app cannot send SMS until a provider is configured.
+- Add the production Vercel URL (for example, `https://campus-operations.vercel.app`) to **Authentication → URL Configuration → Redirect URLs** so email links return to the deployed app.
+
 ## Deploy to Vercel
 
 1. Import this GitHub repository into Vercel.

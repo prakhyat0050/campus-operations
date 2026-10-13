@@ -15,6 +15,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { CampusProvider } from "@/lib/campus/store";
 import { campusRoles, type CampusRole } from "@/lib/campus/access";
 import { getCampusProfile, syncCampusProfile, type CampusProfile } from "@/lib/campus/profile";
+import { isValidE164Phone, normalizeCampusPhone } from "@/lib/campus/phone";
 import { CampusShell } from "@/components/campus/shell";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -131,12 +132,6 @@ function SignInScreen() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  const normalizePhone = (value: string) => {
-    const digits = value.replace(/\D/g, "");
-    if (!digits) return value.trim();
-    return `+${digits}`;
-  };
-
   const onRequestOtp = async () => {
     const input = contact.trim();
     if (!input) {
@@ -151,14 +146,22 @@ function SignInScreen() {
       if (mode === "email") {
         const { error } = await supabase.auth.signInWithOtp({
           email: input,
-          options: { shouldCreateUser: true },
+          options: {
+            shouldCreateUser: true,
+            emailRedirectTo: window.location.origin,
+          },
         });
 
         if (error) throw error;
         setStep("verify");
-        setMessage("A 6-digit OTP has been sent to your email. Enter it below to continue.");
+        setMessage("Check your email for a sign-in link or a 6-digit code. Open the link in this browser, or enter the code below.");
       } else {
-        const phone = normalizePhone(input);
+        const phone = normalizeCampusPhone(input);
+        if (!isValidE164Phone(phone)) {
+          setMessage("Enter a valid phone number with its country code, for example +91 98765 43210.");
+          return;
+        }
+
         const { error } = await supabase.auth.signInWithOtp({
           phone,
           options: { shouldCreateUser: true },
@@ -170,7 +173,11 @@ function SignInScreen() {
       }
     } catch (error) {
       const text = error instanceof Error ? error.message : "Unable to send the OTP.";
-      setMessage(text);
+      setMessage(
+        mode === "phone" && /unsupported phone provider/i.test(text)
+          ? "Phone OTP is not enabled for this campus backend yet. The project owner must enable Phone sign-in and configure an SMS provider in Supabase Auth before SMS codes can be sent."
+          : text,
+      );
     } finally {
       setLoading(false);
     }
@@ -190,7 +197,7 @@ function SignInScreen() {
     try {
       const payload = mode === "email"
         ? { email: contact.trim(), token: code, type: "email" as const }
-        : { phone: normalizePhone(contact), token: code, type: "sms" as const };
+        : { phone: normalizeCampusPhone(contact), token: code, type: "sms" as const };
 
       const { error } = await supabase.auth.verifyOtp(payload);
       if (error) throw error;
@@ -245,10 +252,15 @@ function SignInScreen() {
               value={contact}
               onChange={(event) => setContact(event.target.value)}
               className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-0 placeholder:text-muted-foreground focus:border-ring"
-              placeholder={mode === "email" ? "name@campus.edu" : "+1 555 123 4567"}
+              placeholder={mode === "email" ? "name@campus.edu" : "+91 98765 43210"}
               required
             />
           </label>
+          {mode === "phone" ? (
+            <p className="-mt-2 text-xs text-muted-foreground">
+              Indian 10-digit numbers are accepted; add +country code for other countries.
+            </p>
+          ) : null}
 
           {step === "verify" ? (
             <label className="block text-sm text-foreground">
