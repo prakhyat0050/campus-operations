@@ -1,0 +1,3 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { ModulePage } from '@/components/campus/modules';
+export const Route=createFileRoute('/digital-twin')({head:()=>({meta:[{title:'Digital Twin — Almighty AI'},{name:'description',content:'Digital Twin for the Almighty AI campus intelligence demo.'},{property:'og:title',content:'Digital Twin — Almighty AI'},{property:'og:description',content:'Explore digital twin at the fictional Evergreen University campus.'},{property:'og:type',content:'website'},{name:'twitter:card',content:'summary_large_image'}]}),component:()=> <ModulePage module="digital-twin"/>});

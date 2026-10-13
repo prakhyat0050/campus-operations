@@ -1,0 +1,3 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { ModulePage } from '@/components/campus/modules';
+export const Route=createFileRoute('/ai-insights')({head:()=>({meta:[{title:'AI Insights — Almighty AI'},{name:'description',content:'AI Insights for the Almighty AI campus intelligence demo.'},{property:'og:title',content:'AI Insights — Almighty AI'},{property:'og:description',content:'Explore ai insights at the fictional Evergreen University campus.'},{property:'og:type',content:'website'},{name:'twitter:card',content:'summary_large_image'}]}),component:()=> <ModulePage module="ai-insights"/>});

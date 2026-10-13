@@ -1,0 +1,3 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { ModulePage } from '@/components/campus/modules';
+export const Route=createFileRoute('/sustainability')({head:()=>({meta:[{title:'Sustainability — Almighty AI'},{name:'description',content:'Sustainability for the Almighty AI campus intelligence demo.'},{property:'og:title',content:'Sustainability — Almighty AI'},{property:'og:description',content:'Explore sustainability at the fictional Evergreen University campus.'},{property:'og:type',content:'website'},{name:'twitter:card',content:'summary_large_image'}]}),component:()=> <ModulePage module="sustainability"/>});

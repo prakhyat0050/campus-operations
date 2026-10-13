@@ -1,0 +1,3 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { ModulePage } from '@/components/campus/modules';
+export const Route=createFileRoute('/cybersecurity')({head:()=>({meta:[{title:'Cybersecurity — Almighty AI'},{name:'description',content:'Cybersecurity for the Almighty AI campus intelligence demo.'},{property:'og:title',content:'Cybersecurity — Almighty AI'},{property:'og:description',content:'Explore cybersecurity at the fictional Evergreen University campus.'},{property:'og:type',content:'website'},{name:'twitter:card',content:'summary_large_image'}]}),component:()=> <ModulePage module="cybersecurity"/>});

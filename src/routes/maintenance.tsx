@@ -1,0 +1,3 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { ModulePage } from '@/components/campus/modules';
+export const Route=createFileRoute('/maintenance')({head:()=>({meta:[{title:'Maintenance — Almighty AI'},{name:'description',content:'Maintenance for the Almighty AI campus intelligence demo.'},{property:'og:title',content:'Maintenance — Almighty AI'},{property:'og:description',content:'Explore maintenance at the fictional Evergreen University campus.'},{property:'og:type',content:'website'},{name:'twitter:card',content:'summary_large_image'}]}),component:()=> <ModulePage module="maintenance"/>});

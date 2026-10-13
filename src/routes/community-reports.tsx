@@ -1,0 +1,3 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { ModulePage } from '@/components/campus/modules';
+export const Route=createFileRoute('/community-reports')({head:()=>({meta:[{title:'Community Reports — Almighty AI'},{name:'description',content:'Community Reports for the Almighty AI campus intelligence demo.'},{property:'og:title',content:'Community Reports — Almighty AI'},{property:'og:description',content:'Explore community reports at the fictional Evergreen University campus.'},{property:'og:type',content:'website'},{name:'twitter:card',content:'summary_large_image'}]}),component:()=> <ModulePage module="community-reports"/>});
