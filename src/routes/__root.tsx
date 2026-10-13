@@ -376,7 +376,7 @@ function RootComponent() {
   useEffect(() => {
     let active = true;
     let lastLoadedUserId: string | null | undefined;
-    let pendingUserId: string | null = null;
+    let pendingUserId: string | null | undefined;
 
     const syncAuthState = async (userId: string | null) => {
       if (!active || userId === pendingUserId) return;
