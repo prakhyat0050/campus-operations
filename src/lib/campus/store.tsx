@@ -5,6 +5,7 @@ import { statuses, type RecordItem } from './data';
 import { addRecordNote, advanceRecordStatus, campusRecordsOptions, submitRecord } from './records';
 import { canPerformAction, type CampusRole } from './access';
 import { syncCampusProfile, type CampusProfile } from './profile';
+import { isCampusDemoMode, saveCampusDemoProfile } from './demo';
 
 type NewRecord = Omit<RecordItem, 'id' | 'history'>;
 type Store = { items: RecordItem[]; loading: boolean; loadError: string | null; refresh: () => void; add: (item: NewRecord) => Promise<void>; advance: (id: string) => void; note: (id: string, note: string) => void; simulate: (scenario: string) => void; read: string[]; markRead: () => void; role: CampusRole; profile: CampusProfile; setRole: (role: CampusRole) => Promise<void>; saveDisplayName: (name: string) => Promise<void> };
@@ -22,6 +23,17 @@ export function CampusProvider({ children, profile: initialProfile, onProfileCha
   const fail = (fallback: string) => (error: unknown) => toast.error(error instanceof Error ? error.message : fallback);
   useEffect(() => setProfile(initialProfile), [initialProfile]);
   const saveProfile = async (changes: { role?: CampusRole; display_name?: string | null }) => {
+    if (isCampusDemoMode()) {
+      const saved = saveCampusDemoProfile({
+        ...profile,
+        role: changes.role ?? profile.role,
+        display_name: changes.display_name ?? profile.display_name,
+      });
+      setProfile(saved);
+      onProfileChange(saved);
+      return saved;
+    }
+
     const saved = await syncCampusProfile({
       role: changes.role ?? profile.role,
       displayName: changes.display_name ?? profile.display_name,

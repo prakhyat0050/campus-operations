@@ -29,6 +29,10 @@ Use the same project URL and publishable key for the server and browser variable
 
 Database migrations are in `drizzle/migrations`. Apply the required migrations to the Supabase project before using authenticated data features.
 
+## Local demo workspace
+
+The sign-in screen includes **Continue to demo workspace** for presentations and hackathon walkthroughs when OTP delivery is unavailable. It does not require an email or phone number. Demo records and profile changes are stored in this browser only, persist between demo sessions, and are not sent to Supabase. The selectable roles and their permissions are a local workflow simulation, not authenticated authorization. Clear this site's browser storage to remove saved demo data.
+
 ## Authentication provider setup
 
 - To send an email code instead of a magic link, open Supabase **Authentication → Email Templates → Magic Link or OTP** and make the message include `{{ .Token }}`. Supabase's default magic-link template sends a link.

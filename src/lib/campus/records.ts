@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { assertCampusPermission, getDefaultAssignedTeam, normalizeCampusRole, resolveAuthRole, type CampusRole } from './access';
 import { makeSeed, sampleMinutesAgo, sampleNotes, type Priority, type RecordItem, type Status } from './data';
+import { getCampusDemoProfile, isCampusDemoMode, loadCampusDemoRecords, saveCampusDemoRecords } from './demo';
 
 type Kind = RecordItem['kind'];
 type NewRecord = Omit<RecordItem, 'id' | 'history'>;
@@ -46,6 +47,8 @@ export function newRefCode(kind: Kind) {
 }
 
 async function loadCampusRecords(): Promise<RecordItem[]> {
+  if (isCampusDemoMode()) return loadCampusDemoRecords();
+
   const records = await supabase
     .from('campus_records')
     .select('*')
@@ -92,6 +95,12 @@ export const campusRecordsOptions = queryOptions({
 });
 
 async function getCurrentCampusRole(): Promise<CampusRole> {
+  if (isCampusDemoMode()) {
+    const profile = getCampusDemoProfile();
+    if (!profile) throw new Error('The local campus demo profile is missing. Return to sign-in and enter demo mode again.');
+    return profile.role;
+  }
+
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   if (userError || !user) {
     throw new Error('You must be signed in to manage campus records.');
@@ -112,6 +121,20 @@ async function insertRow(item: NewRecord, refCode: string, note: string, minutes
 
   const assignedTeam = (item.team || getDefaultAssignedTeam(currentRole)).trim();
   const createdAt = new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  if (isCampusDemoMode()) {
+    const records = loadCampusDemoRecords();
+    if (records.some((record) => record.id === refCode)) {
+      return { ok: false, duplicate: true, message: 'A demo record with this reference already exists.' };
+    }
+    saveCampusDemoRecords([{
+      ...item,
+      id: refCode,
+      team: assignedTeam,
+      history: [formatActivity(note, createdAt)],
+    }, ...records]);
+    return { ok: true };
+  }
+
   const inserted = await supabase.from('campus_records').insert({
     ref_code: refCode,
     kind: item.kind,
@@ -164,6 +187,16 @@ export async function advanceRecordStatus({ id, status, team, note }: { id: stri
   assertCampusPermission(currentRole, 'advance_ticket', 'Updating a campus ticket');
 
   const assignedTeam = (team || getDefaultAssignedTeam(currentRole)).trim();
+  if (isCampusDemoMode()) {
+    const records = loadCampusDemoRecords();
+    const updated = records.map((record) => record.id === id
+      ? { ...record, status, team: assignedTeam, history: [...record.history, formatActivity(note, new Date().toISOString())] }
+      : record);
+    if (!records.some((record) => record.id === id)) throw new Error('Campus record could not be found.');
+    saveCampusDemoRecords(updated);
+    return id;
+  }
+
   const updated = await supabase.from('campus_records').update({ status, team: assignedTeam }).eq('ref_code', id);
   if (updated.error) throw new Error(`Request status could not be updated. ${updated.error.message}`);
   const timeline = await supabase.from('campus_record_events').insert({ record_ref: id, note });
@@ -175,6 +208,19 @@ export async function addRecordNote({ id, note }: { id: string; note: string }) 
   const currentRole = await getCurrentCampusRole();
   assertCampusPermission(currentRole, 'edit_ticket', 'Adding a campus note');
 
+  if (isCampusDemoMode()) {
+    const records = loadCampusDemoRecords();
+    let found = false;
+    const updated = records.map((record) => {
+      if (record.id !== id) return record;
+      found = true;
+      return { ...record, history: [...record.history, formatActivity(note, new Date().toISOString())] };
+    });
+    if (!found) throw new Error('Campus record could not be found.');
+    saveCampusDemoRecords(updated);
+    return id;
+  }
+
   const timeline = await supabase.from('campus_record_events').insert({ record_ref: id, note });
   if (timeline.error) throw new Error(`Note could not be saved. ${timeline.error.message}`);
   return id;
@@ -182,6 +228,11 @@ export async function addRecordNote({ id, note }: { id: string; note: string }) 
 
 // Restores the fictional sample campus for the whole shared demo.
 export async function restoreSampleCampus() {
+  if (isCampusDemoMode()) {
+    saveCampusDemoRecords(makeSeed());
+    return;
+  }
+
   const cleared = await supabase.from('campus_records').delete().neq('ref_code', '');
   if (cleared.error) throw new Error(`Sample campus could not be restored. ${cleared.error.message}`);
   for (const item of makeSeed()) {

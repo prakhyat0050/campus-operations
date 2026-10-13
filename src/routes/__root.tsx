@@ -16,6 +16,7 @@ import { CampusProvider } from "@/lib/campus/store";
 import { campusRoles, type CampusRole } from "@/lib/campus/access";
 import { getCampusProfile, syncCampusProfile, type CampusProfile } from "@/lib/campus/profile";
 import { isValidE164Phone, normalizeCampusPhone } from "@/lib/campus/phone";
+import { endCampusDemo, getCampusDemoProfile, isCampusDemoMode, startCampusDemo } from "@/lib/campus/demo";
 import { CampusShell } from "@/components/campus/shell";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -124,8 +125,9 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
-function SignInScreen() {
+function SignInScreen({ onDemoLogin }: { onDemoLogin: (role: CampusRole) => void }) {
   const [mode, setMode] = useState<"email" | "phone">("email");
+  const [demoRole, setDemoRole] = useState<CampusRole>("Super Admin");
   const [contact, setContact] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"request" | "verify">("request");
@@ -302,6 +304,34 @@ function SignInScreen() {
         </form>
 
         {message ? <p className="mt-4 text-sm text-muted-foreground">{message}</p> : null}
+
+        <div className="mt-6 border-t border-border pt-5">
+          <h2 className="text-sm font-medium text-foreground">Hackathon demo</h2>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Open the workspace without OTP. Demo changes stay in this browser only and are not saved to the campus backend.
+          </p>
+          <label className="mt-4 block text-sm text-foreground">
+            Demo role
+            <select
+              aria-label="Demo role"
+              value={demoRole}
+              onChange={(event) => {
+                const nextRole = campusRoles.find((candidate) => candidate === event.target.value);
+                if (nextRole) setDemoRole(nextRole);
+              }}
+              className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              {campusRoles.map((role) => <option key={role} value={role}>{role}</option>)}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => onDemoLogin(demoRole)}
+            className="mt-4 inline-flex w-full items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80"
+          >
+            Continue to demo workspace
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -390,6 +420,24 @@ function RootComponent() {
     let lastLoadedUserId: string | null | undefined;
     let pendingUserId: string | null | undefined;
 
+    try {
+      if (isCampusDemoMode()) {
+        const demoProfile = getCampusDemoProfile();
+        if (demoProfile) {
+          setProfile(demoProfile);
+          setNeedsProfileSetup(false);
+          setAuthenticated(true);
+          setReady(true);
+          return () => { active = false; };
+        }
+        endCampusDemo();
+      }
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "The local campus demo could not be loaded.");
+      setReady(true);
+      return () => { active = false; };
+    }
+
     const syncAuthState = async (userId: string | null) => {
       if (!active || userId === pendingUserId) return;
       if (userId === lastLoadedUserId) {
@@ -470,7 +518,15 @@ function RootComponent() {
   if (!authenticated) {
     return (
       <QueryClientProvider client={queryClient}>
-        <SignInScreen />
+        <SignInScreen onDemoLogin={(role) => {
+          const demoProfile = startCampusDemo(role);
+          queryClient.clear();
+          setAuthError(null);
+          setProfile(demoProfile);
+          setNeedsProfileSetup(false);
+          setAuthenticated(true);
+          setReady(true);
+        }} />
       </QueryClientProvider>
     );
   }

@@ -3,10 +3,12 @@ import { Download, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getDefaultAssignedTeam, getRoleOptions, type CampusRole } from '@/lib/campus/access';
 import { useCampus } from '@/lib/campus/store';
+import { isCampusDemoMode } from '@/lib/campus/demo';
 import { toast } from 'sonner';
 
 export function CampusSettings() {
   const { items, profile, role, setRole, saveDisplayName } = useCampus();
+  const demoMode = isCampusDemoMode();
   const [displayName, setDisplayName] = useState(profile.display_name ?? '');
   const [selectedRole, setSelectedRole] = useState<CampusRole>(role);
   const [saving, setSaving] = useState(false);
@@ -38,7 +40,7 @@ export function CampusSettings() {
     <div className="max-w-3xl divide-y divide-border">
       <section className="py-6">
         <h2 className="mb-2 text-sm font-medium">Profile</h2>
-        <p className="mb-5 text-xs text-muted-foreground">Manage the name shown to your campus workspace.</p>
+        <p className="mb-5 text-xs text-muted-foreground">Manage the name shown to your campus workspace{demoMode ? '. Demo profile changes stay in this browser.' : '.'}</p>
         <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void save(() => saveDisplayName(displayName)); }}>
           <label className="form-field max-w-md">
             Display name
@@ -46,7 +48,7 @@ export function CampusSettings() {
           </label>
           <label className="form-field max-w-md">
             Sign-in email
-            <input value={profile.email ?? 'Phone sign-in'} readOnly aria-readonly="true" />
+            <input value={profile.email ?? (demoMode ? 'Local demo — no sign-in' : 'Phone sign-in')} readOnly aria-readonly="true" />
           </label>
           <Button type="submit" variant="outline" disabled={saving || displayName.trim() === (profile.display_name ?? '')}>
             <Save />Save profile
@@ -57,7 +59,7 @@ export function CampusSettings() {
       <section className="py-6">
         <h2 className="mb-2 text-sm font-medium">Campus role</h2>
         <p className="mb-5 text-xs leading-relaxed text-muted-foreground">
-          Your role controls which campus records and actions are available to you. Default assignment team: {getDefaultAssignedTeam(role)}.
+          Your role controls which campus records and actions are available to you{demoMode ? ' in this local simulation' : ''}. Default assignment team: {getDefaultAssignedTeam(role)}.
         </p>
         <label className="form-field max-w-md">
           Active role
@@ -73,7 +75,7 @@ export function CampusSettings() {
           </select>
         </label>
         <p className="mt-3 text-xs text-muted-foreground">
-          {selectedRole === role ? `Current access: ${role}.` : `Changing to ${selectedRole} will update your workspace permissions.`}
+          {selectedRole === role ? `Current ${demoMode ? 'simulated ' : ''}access: ${role}.` : `Changing to ${selectedRole} will update your ${demoMode ? 'simulated ' : ''}workspace permissions.`}
         </p>
         <Button className="mt-4" disabled={saving || selectedRole === role} onClick={() => void save(() => setRole(selectedRole))}>
           <Save />Save role
@@ -83,7 +85,7 @@ export function CampusSettings() {
       <section className="py-6">
         <h2 className="mb-2 text-sm font-medium">Campus records</h2>
         <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
-          Reports and activity are stored in the campus workspace and access is governed by your role.
+          {demoMode ? 'Demo reports and activity are stored only in this browser. They are not sent to the campus backend.' : 'Reports and activity are stored in the campus workspace and access is governed by your role.'}
         </p>
         <Button variant="outline" onClick={exportRecords}><Download />Export records</Button>
       </section>
