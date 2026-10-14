@@ -36,7 +36,8 @@ The sign-in screen includes **Continue to demo workspace** for presentations and
 ## Authentication provider setup
 
 - To send an email code instead of a magic link, open Supabase **Authentication → Email Templates → Magic Link or OTP** and make the message include `{{ .Token }}`. Supabase's default magic-link template sends a link.
-- For phone OTP, enable **Phone** in **Authentication → Sign In / Providers → Auth Providers**, then configure an SMS provider (such as Twilio) and its credentials. The app cannot send SMS until a provider is configured.
+- For phone OTP, enable **Phone** in **Authentication → Sign In / Providers → Auth Providers**, then select and configure an SMS provider (such as Twilio) with its credentials in Supabase. Also check the provider's sender number and SMS template, and ensure the destination country is enabled with the provider. The app cannot send SMS until the provider is configured; provider credentials must never be added to this app or its `.env` file.
+- The sign-in screen accepts Indian 10-digit mobile numbers (normalized to `+91`) or international numbers in E.164 format. After requesting a code, enter all 6 digits or choose **Resend OTP**. If sending fails with an unsupported phone provider error, phone sign-in or the SMS provider is not enabled/configured in Supabase.
 - Add the production Vercel URL (for example, `https://campus-operations.vercel.app`) to **Authentication → URL Configuration → Redirect URLs** so email links return to the deployed app.
 
 ## Deploy to Vercel

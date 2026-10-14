@@ -155,6 +155,7 @@ function SignInScreen({ onDemoLogin }: { onDemoLogin: (role: CampusRole) => void
         });
 
         if (error) throw error;
+        setOtp("");
         setStep("verify");
         setMessage("Check your email for a sign-in link or a 6-digit code. Open the link in this browser, or enter the code below.");
       } else {
@@ -170,6 +171,7 @@ function SignInScreen({ onDemoLogin }: { onDemoLogin: (role: CampusRole) => void
         });
 
         if (error) throw error;
+        setOtp("");
         setStep("verify");
         setMessage("A 6-digit OTP has been sent to your phone. Enter it below to continue.");
       }
@@ -188,7 +190,7 @@ function SignInScreen({ onDemoLogin }: { onDemoLogin: (role: CampusRole) => void
   const onVerifyOtp = async (event: FormEvent) => {
     event.preventDefault();
     const code = otp.trim();
-    if (!code) {
+    if (!/^\d{6}$/.test(code)) {
       setMessage("Enter the 6-digit code sent to your device.");
       return;
     }
@@ -253,6 +255,7 @@ function SignInScreen({ onDemoLogin }: { onDemoLogin: (role: CampusRole) => void
               type={mode === "email" ? "email" : "tel"}
               value={contact}
               onChange={(event) => setContact(event.target.value)}
+              disabled={step === "verify"}
               className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-0 placeholder:text-muted-foreground focus:border-ring"
               placeholder={mode === "email" ? "name@campus.edu" : "+91 98765 43210"}
               required
@@ -289,17 +292,28 @@ function SignInScreen({ onDemoLogin }: { onDemoLogin: (role: CampusRole) => void
           </button>
 
           {step === "verify" ? (
-            <button
-              type="button"
-              onClick={() => {
-                setStep("request");
-                setOtp("");
-                setMessage("You can request a new code any time.");
-              }}
-              className="w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline"
-            >
-              Change contact details
-            </button>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => void onRequestOtp()}
+                disabled={loading}
+                className="w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Resend OTP
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("request");
+                  setOtp("");
+                  setMessage("Update your contact details, then request a new code.");
+                }}
+                disabled={loading}
+                className="w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Change contact details
+              </button>
+            </div>
           ) : null}
         </form>
 
