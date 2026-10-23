@@ -8,18 +8,16 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { CampusProvider } from "@/lib/campus/store";
 import { campusRoles, type CampusRole } from "@/lib/campus/access";
-import { getCampusProfile, syncCampusProfile, type CampusProfile } from "@/lib/campus/profile";
-import { isValidE164Phone, normalizeCampusPhone } from "@/lib/campus/phone";
+import type { CampusProfile } from "@/lib/campus/profile";
 import { endCampusDemo, getCampusDemoProfile, isCampusDemoMode, startCampusDemo } from "@/lib/campus/demo";
 import { CampusShell } from "@/components/campus/shell";
 import { Toaster } from "@/components/ui/sonner";
-import { supabase } from "@/integrations/supabase/client";
 
 function NotFoundComponent() {
   return (
@@ -126,295 +124,40 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 function SignInScreen({ onDemoLogin }: { onDemoLogin: (role: CampusRole) => void }) {
-  const [mode, setMode] = useState<"email" | "phone">("email");
   const [demoRole, setDemoRole] = useState<CampusRole>("Super Admin");
-  const [contact, setContact] = useState("");
-  const [otp, setOtp] = useState("");
-  const [step, setStep] = useState<"request" | "verify">("request");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-
-  const onRequestOtp = async () => {
-    const input = contact.trim();
-    if (!input) {
-      setMessage("Enter your email or phone number first.");
-      return;
-    }
-
-    setLoading(true);
-    setMessage("");
-
-    try {
-      if (mode === "email") {
-        const { error } = await supabase.auth.signInWithOtp({
-          email: input,
-          options: {
-            shouldCreateUser: true,
-            emailRedirectTo: window.location.origin,
-          },
-        });
-
-        if (error) throw error;
-        setOtp("");
-        setStep("verify");
-        setMessage("Check your email for a sign-in link or a 6-digit code. Open the link in this browser, or enter the code below.");
-      } else {
-        const phone = normalizeCampusPhone(input);
-        if (!isValidE164Phone(phone)) {
-          setMessage("Enter a valid phone number with its country code, for example +91 98765 43210.");
-          return;
-        }
-
-        const { error } = await supabase.auth.signInWithOtp({
-          phone,
-          options: { shouldCreateUser: true },
-        });
-
-        if (error) throw error;
-        setOtp("");
-        setStep("verify");
-        setMessage("A 6-digit OTP has been sent to your phone. Enter it below to continue.");
-      }
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "Unable to send the OTP.";
-      setMessage(
-        mode === "phone" && /unsupported phone provider/i.test(text)
-          ? "Phone OTP is not enabled for this campus backend yet. The project owner must enable Phone sign-in and configure an SMS provider in Supabase Auth before SMS codes can be sent."
-          : text,
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onVerifyOtp = async (event: FormEvent) => {
-    event.preventDefault();
-    const code = otp.trim();
-    if (!/^\d{6}$/.test(code)) {
-      setMessage("Enter the 6-digit code sent to your device.");
-      return;
-    }
-
-    setLoading(true);
-    setMessage("");
-
-    try {
-      const payload = mode === "email"
-        ? { email: contact.trim(), token: code, type: "email" as const }
-        : { phone: normalizeCampusPhone(contact), token: code, type: "sms" as const };
-
-      const { error } = await supabase.auth.verifyOtp(payload);
-      if (error) throw error;
-      setMessage("Login successful. Redirecting to your campus workspace…");
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "The OTP could not be verified.";
-      setMessage(text);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">Almighty AI</p>
-        <h1 className="mt-3 text-2xl font-semibold text-foreground">Campus access</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Use email or phone OTP to sign in to the real campus workspace.</p>
-
-        <div className="mt-5 grid grid-cols-2 gap-2 rounded-md border border-border bg-background p-1">
-          <button
-            type="button"
-            onClick={() => {
-              setMode("email");
-              setStep("request");
-              setOtp("");
-              setMessage("");
+        <h1 className="mt-3 text-2xl font-semibold text-foreground">Campus demo workspace</h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          Choose a role to explore the campus workspace. No phone number, email, or OTP is needed.
+        </p>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          This is a local demo. Changes stay in this browser and are not saved to the campus backend.
+        </p>
+        <label className="mt-6 block text-sm text-foreground">
+          Demo role
+          <select
+            aria-label="Demo role"
+            value={demoRole}
+            onChange={(event) => {
+              const nextRole = campusRoles.find((candidate) => candidate === event.target.value);
+              if (nextRole) setDemoRole(nextRole);
             }}
-            className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${mode === "email" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
-            Email OTP
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMode("phone");
-              setStep("request");
-              setOtp("");
-              setMessage("");
-            }}
-            className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${mode === "phone" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            Phone OTP
-          </button>
-        </div>
-
-        <form onSubmit={step === "request" ? (event) => { event.preventDefault(); void onRequestOtp(); } : onVerifyOtp} className="mt-6 space-y-4">
-          <label className="block text-sm text-foreground">
-            {mode === "email" ? "Email" : "Phone number"}
-            <input
-              type={mode === "email" ? "email" : "tel"}
-              value={contact}
-              onChange={(event) => setContact(event.target.value)}
-              disabled={step === "verify"}
-              className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-0 placeholder:text-muted-foreground focus:border-ring"
-              placeholder={mode === "email" ? "name@campus.edu" : "+91 98765 43210"}
-              required
-            />
-          </label>
-          {mode === "phone" ? (
-            <p className="-mt-2 text-xs text-muted-foreground">
-              Indian 10-digit numbers are accepted; add +country code for other countries.
-            </p>
-          ) : null}
-
-          {step === "verify" ? (
-            <label className="block text-sm text-foreground">
-              Enter OTP
-              <input
-                type="text"
-                inputMode="numeric"
-                value={otp}
-                onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-0 placeholder:text-muted-foreground focus:border-ring"
-                placeholder="123456"
-                required
-                maxLength={6}
-              />
-            </label>
-          ) : null}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {loading ? (step === "request" ? "Sending OTP…" : "Verifying…") : (step === "request" ? "Send OTP" : "Verify OTP")}
-          </button>
-
-          {step === "verify" ? (
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => void onRequestOtp()}
-                disabled={loading}
-                className="w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                Resend OTP
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setStep("request");
-                  setOtp("");
-                  setMessage("Update your contact details, then request a new code.");
-                }}
-                disabled={loading}
-                className="w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                Change contact details
-              </button>
-            </div>
-          ) : null}
-        </form>
-
-        {message ? <p className="mt-4 text-sm text-muted-foreground">{message}</p> : null}
-
-        <div className="mt-6 border-t border-border pt-5">
-          <h2 className="text-sm font-medium text-foreground">Hackathon demo</h2>
-          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            Open the workspace without OTP. Demo changes stay in this browser only and are not saved to the campus backend.
-          </p>
-          <label className="mt-4 block text-sm text-foreground">
-            Demo role
-            <select
-              aria-label="Demo role"
-              value={demoRole}
-              onChange={(event) => {
-                const nextRole = campusRoles.find((candidate) => candidate === event.target.value);
-                if (nextRole) setDemoRole(nextRole);
-              }}
-              className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            >
-              {campusRoles.map((role) => <option key={role} value={role}>{role}</option>)}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={() => onDemoLogin(demoRole)}
-            className="mt-4 inline-flex w-full items-center justify-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/80"
-          >
-            Continue to demo workspace
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ProfileSetupScreen({ onComplete }: { onComplete: (profile: CampusProfile) => void }) {
-  const [role, setRole] = useState<CampusRole>("Student");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-
-  const onSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    setLoading(true);
-    setMessage("");
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No active campus session was found.");
-
-      const profile = await syncCampusProfile({
-        role,
-        displayName: user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.email ?? "Campus user",
-        email: user.email ?? null,
-      });
-
-      if (!profile) throw new Error("Your campus profile could not be saved.");
-      onComplete(profile);
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "Your role could not be saved.";
-      setMessage(text);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">Almighty AI</p>
-        <h1 className="mt-3 text-2xl font-semibold text-foreground">Set your campus role</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Choose the role that matches your access level for this campus workspace.</p>
-
-        <form onSubmit={onSubmit} className="mt-6 space-y-4">
-          <label className="block text-sm text-foreground">
-            Role
-            <select
-              value={role}
-              onChange={(event) => {
-                const selectedRole = campusRoles.find((candidate) => candidate === event.target.value);
-                if (selectedRole) setRole(selectedRole);
-              }}
-              className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-0 focus:border-ring"
-            >
-              {campusRoles.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          </label>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {loading ? "Saving role…" : "Continue to campus"}
-          </button>
-        </form>
-
-        {message ? <p className="mt-4 text-sm text-muted-foreground">{message}</p> : null}
+            {campusRoles.map((role) => <option key={role} value={role}>{role}</option>)}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={() => onDemoLogin(demoRole)}
+          className="mt-5 inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          Continue to demo workspace
+        </button>
       </div>
     </div>
   );
@@ -423,132 +166,58 @@ function ProfileSetupScreen({ onComplete }: { onComplete: (profile: CampusProfil
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const [ready, setReady] = useState(false);
-  const [authenticated, setAuthenticated] = useState(false);
-  const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
   const [profile, setProfile] = useState<CampusProfile | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const profileRequest = useRef(0);
+  const [demoError, setDemoError] = useState<string | null>(null);
 
   useEffect(() => {
-    let active = true;
-    let lastLoadedUserId: string | null | undefined;
-    let pendingUserId: string | null | undefined;
-
     try {
       if (isCampusDemoMode()) {
         const demoProfile = getCampusDemoProfile();
         if (demoProfile) {
           setProfile(demoProfile);
-          setNeedsProfileSetup(false);
-          setAuthenticated(true);
-          setReady(true);
-          return () => { active = false; };
+        } else {
+          endCampusDemo();
         }
-        endCampusDemo();
       }
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "The local campus demo could not be loaded.");
+      setDemoError(error instanceof Error ? error.message : "The local campus demo could not be loaded.");
+    } finally {
       setReady(true);
-      return () => { active = false; };
     }
-
-    const syncAuthState = async (userId: string | null) => {
-      if (!active || userId === pendingUserId) return;
-      if (userId === lastLoadedUserId) {
-        setReady(true);
-        return;
-      }
-      const requestId = ++profileRequest.current;
-      pendingUserId = userId;
-      setReady(false);
-      setAuthError(null);
-      if (!userId) {
-        lastLoadedUserId = null;
-        pendingUserId = null;
-        setAuthenticated(false);
-        setNeedsProfileSetup(false);
-        setProfile(null);
-        setReady(true);
-        return;
-      }
-      setAuthenticated(true);
-
-      try {
-        const loadedProfile = await getCampusProfile(userId);
-        if (!active || requestId !== profileRequest.current) return;
-        setProfile(loadedProfile);
-        setNeedsProfileSetup(!loadedProfile);
-        lastLoadedUserId = userId;
-      } catch (error) {
-        if (!active || requestId !== profileRequest.current) return;
-        setAuthError(error instanceof Error ? error.message : "Your campus profile could not be loaded.");
-      } finally {
-        if (active && requestId === profileRequest.current) {
-          pendingUserId = null;
-          setReady(true);
-        }
-      }
-    };
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event !== "TOKEN_REFRESHED") void syncAuthState(session?.user.id ?? null);
-    });
-
-    void supabase.auth.getSession().then(({ data, error }) => {
-      if (error) throw error;
-      void syncAuthState(data.session?.user.id ?? null);
-    }).catch((error: unknown) => {
-      if (!active) return;
-      setAuthError(error instanceof Error ? error.message : "Campus access could not be initialized.");
-      setReady(true);
-    });
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
   }, []);
 
   if (!ready) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
-        Loading campus access…
+        Loading campus workspace…
       </div>
     );
   }
 
-  if (authError) {
+  if (demoError) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center shadow-sm">
-          <h1 className="text-lg font-semibold">Campus profile unavailable</h1>
-          <p className="mt-3 text-sm text-muted-foreground">{authError}</p>
+          <h1 className="text-lg font-semibold">Demo workspace unavailable</h1>
+          <p className="mt-3 text-sm text-muted-foreground">{demoError}</p>
           <button type="button" onClick={() => window.location.reload()} className="mt-5 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">Try again</button>
         </div>
       </div>
     );
   }
 
-  if (!authenticated) {
+  if (!profile) {
     return (
       <QueryClientProvider client={queryClient}>
         <SignInScreen onDemoLogin={(role) => {
-          const demoProfile = startCampusDemo(role);
-          queryClient.clear();
-          setAuthError(null);
-          setProfile(demoProfile);
-          setNeedsProfileSetup(false);
-          setAuthenticated(true);
-          setReady(true);
+          try {
+            const demoProfile = startCampusDemo(role);
+            queryClient.clear();
+            setProfile(demoProfile);
+          } catch (error) {
+            setDemoError(error instanceof Error ? error.message : "The local campus demo could not be started.");
+          }
         }} />
-      </QueryClientProvider>
-    );
-  }
-
-  if (needsProfileSetup || !profile) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <ProfileSetupScreen onComplete={(savedProfile) => { setProfile(savedProfile); setNeedsProfileSetup(false); setAuthenticated(true); }} />
       </QueryClientProvider>
     );
   }
