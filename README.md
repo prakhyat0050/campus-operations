@@ -29,16 +29,22 @@ Use the same project URL and publishable key for the server and browser variable
 
 Database migrations are in `drizzle/migrations`. Apply the required migrations to the Supabase project before using authenticated data features.
 
-## Local demo workspace
+## Demo workspace access
 
-The sign-in screen includes **Continue to demo workspace** for presentations and hackathon walkthroughs when OTP delivery is unavailable. It does not require an email or phone number. Demo records and profile changes are stored in this browser only, persist between demo sessions, and are not sent to Supabase. The selectable roles and their permissions are a local workflow simulation, not authenticated authorization. Clear this site's browser storage to remove saved demo data.
+The sign-in screen offers only **Continue to demo workspace**. It does not require an email, phone number, or OTP. Demo records and profile changes are stored in this browser only, persist between demo sessions, and are not sent to Supabase. Selectable roles and their permissions simulate workflows; they are not authenticated authorization. Clear this site's browser storage to remove saved demo data.
 
-## Authentication provider setup
+Email and SMS authentication are currently unavailable in the app. Re-enable a real sign-in flow only after the project owner configures and can maintain the Supabase authentication providers and credentials.
 
-- To send an email code instead of a magic link, open Supabase **Authentication → Email Templates → Magic Link or OTP** and make the message include `{{ .Token }}`. Supabase's default magic-link template sends a link.
-- For phone OTP, enable **Phone** in **Authentication → Sign In / Providers → Auth Providers**, then select and configure an SMS provider (such as Twilio) with its credentials in Supabase. Also check the provider's sender number and SMS template, and ensure the destination country is enabled with the provider. The app cannot send SMS until the provider is configured; provider credentials must never be added to this app or its `.env` file.
-- The sign-in screen accepts Indian 10-digit mobile numbers (normalized to `+91`) or international numbers in E.164 format. After requesting a code, enter all 6 digits or choose **Resend OTP**. If sending fails with an unsupported phone provider error, phone sign-in or the SMS provider is not enabled/configured in Supabase.
-- Add the production Vercel URL (for example, `https://campus-operations.vercel.app`) to **Authentication → URL Configuration → Redirect URLs** so email links return to the deployed app.
+## Deploy to Render
+
+This repository includes a Render Blueprint in `render.yaml` and builds TanStack Start for Render's Node.js runtime.
+
+1. Push the repository to GitHub and create a new Blueprint in the [Render Dashboard](https://dashboard.render.com/blueprints), selecting the repository.
+2. Add the four Supabase environment values from `.env.example` when Render prompts for them. Use only the publishable key; never add a Supabase service-role key.
+3. Deploy the Blueprint. Render installs dependencies with `npm ci`, builds the app, and starts the Node server.
+4. Add the deployed `onrender.com` URL to the Supabase project's allowed authentication redirect URLs.
+
+The free web-service plan can spin down when idle, so its first request after inactivity may take longer.
 
 ## Deploy to Vercel
 

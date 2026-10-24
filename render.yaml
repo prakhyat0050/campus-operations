@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: campus-operations
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: node .output/server/index.mjs
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false

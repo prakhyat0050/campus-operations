@@ -31,13 +31,14 @@ export const campusRecordsKey = ['campus-records'] as const;
 export function formatActivity(note: string, createdAt: string) {
   const date = new Date(createdAt);
   if (Number.isNaN(date.getTime())) return note;
-  const startOfDay = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
-  const days = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86_400_000);
-  const label = days <= 0
+
+  const msSince = Date.now() - date.getTime();
+  const label = msSince < 24 * 60 * 60 * 1000
     ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : days === 1
+    : msSince < 48 * 60 * 60 * 1000
       ? 'Yesterday'
       : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+
   return `${label} · ${note}`;
 }
 
