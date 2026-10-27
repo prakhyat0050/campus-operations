@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { X, ArrowRight, CircleCheck, Upload } from 'lucide-react';
+import { X, ArrowRight, CircleCheck, Upload, Sparkles, LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCampus } from '@/lib/campus/store';
 import { buildings, buildingName, classify, duplicate, statuses, type RecordItem } from '@/lib/campus/data';
+import { analyzeCampusIncident, type GemmaSuggestion } from '@/lib/campus/gemma';
 import { toast } from 'sonner';
 export function Modal({title,onClose,children}:{title:string;onClose:()=>void;children:ReactNode}) {
  const ref=useRef<HTMLDivElement>(null);const closeRef=useRef(onClose);closeRef.current=onClose;
@@ -15,7 +16,99 @@ export function RecordDetail({id,onClose}:{id:string;onClose:()=>void}) {
  return <Modal title={item.title} onClose={onClose}><div className="mb-5 flex items-center gap-3"><Priority value={item.priority}/><span className="text-xs text-muted-foreground">{item.id} · {item.status}</span></div><p className="mb-5 text-sm leading-relaxed text-muted-foreground">{item.description}</p>{item.photo&&<img src={item.photo} alt="Attached report" className="mb-4 max-h-52 w-full rounded object-contain"/>}<dl className="mb-5 grid grid-cols-2 gap-4 text-xs"><div><dt className="text-muted-foreground">Building</dt><dd className="mt-1">{buildingName(item.building)}</dd></div><div><dt className="text-muted-foreground">Assigned to</dt><dd className="mt-1">{item.team||'Unassigned'}</dd></div><div><dt className="text-muted-foreground">Category</dt><dd className="mt-1">{item.category}</dd></div><div><dt className="text-muted-foreground">Source</dt><dd className="mt-1">Simulated campus record</dd></div></dl><h3 className="mb-3 text-sm">Activity timeline</h3><div className="mb-5 border-l border-border pl-4">{item.history.map((h,i)=><p key={i} className="mb-3 text-xs text-muted-foreground">{h}</p>)}</div><form className="flex gap-2" onSubmit={e=>{e.preventDefault();note(id,text);setText('');}}><input aria-label="Add a note" className="min-w-0 flex-1" placeholder="Add a follow-up note…" value={text} onChange={e=>setText(e.target.value)} maxLength={500} required/><Button variant="outline" type="submit">Add note</Button></form>{item.status!=='Resolved'&&<Button className="mt-5 w-full" disabled={role==='Student'} onClick={()=>advance(id)}>Move to {statuses[statuses.indexOf(item.status)+1]}<ArrowRight/></Button>}{item.status==='Resolved'&&<p className="mt-5 flex items-center justify-center gap-2 text-sm text-success"><CircleCheck className="h-4 w-4"/>Request resolved</p>}</Modal>;
 }
 export function ReportForm({kind,onClose}:{kind:'maintenance'|'community';onClose:()=>void}) {
- const {add,items}=useCampus();const [title,setTitle]=useState('');const [description,setDescription]=useState('');const [building,setBuilding]=useState('academic');const [category,setCategory]=useState('Plumbing');const [priority,setPriority]=useState<RecordItem['priority']>('Medium');const [photo,setPhoto]=useState<string>();const [reviewed,setReviewed]=useState(false);const [saving,setSaving]=useState(false);
- const analysis=classify(description);const match=duplicate(title+' '+description,building,items);
- return <Modal title={kind==='maintenance'?'New maintenance request':'Report a campus issue'} onClose={onClose}><form className="space-y-4" onSubmit={async e=>{e.preventDefault();if(saving)return;if(title.trim().length<5||description.trim().length<10){toast.error('Add a title of at least 5 characters and a description of at least 10.');return;}if(match&&!reviewed){toast.error('Review the possible duplicate before submitting.');return;}setSaving(true);try{await add({title:title.trim(),description:description.trim(),building,category,priority,kind,status:'Reported',team:'',...(photo?{photo}:{})});onClose();}catch{/* The save mutation displays the database error; keep the form open for retry. */}finally{setSaving(false);}}}><label className="form-field">Title<input autoFocus value={title} onChange={e=>{setTitle(e.target.value);setReviewed(false);}} placeholder="e.g. Leaking tap in the science lab" minLength={5} maxLength={120} required/></label><label className="form-field">Description<textarea value={description} onChange={e=>{setDescription(e.target.value);setReviewed(false);}} placeholder="Describe the issue and its location…" minLength={10} maxLength={2000} required/></label><div className="form-grid"><label className="form-field">Building<select aria-label="Building" value={building} onChange={e=>{setBuilding(e.target.value);setReviewed(false);}}>{buildings.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label><label className="form-field">Category<select aria-label="Category" value={category} onChange={e=>setCategory(e.target.value)}>{['Plumbing','Electrical','Infrastructure','Cleanliness','Safety','Other'].map(c=><option key={c}>{c}</option>)}</select></label><label className="form-field">Priority<select aria-label="Priority" value={priority} onChange={e=>setPriority(e.target.value as RecordItem['priority'])}>{['Low','Medium','High','Critical'].map(c=><option key={c}>{c}</option>)}</select></label><label className="form-field">Photo (optional, up to 2 MB)<input type="file" accept="image/png,image/jpeg,image/webp" className="w-full text-[10px]" onChange={e=>{const f=e.target.files?.[0];if(!f)return;if(f.size>2*1024*1024||!['image/jpeg','image/png','image/webp'].includes(f.type)){toast.error('Use a JPG, PNG, or WebP image under 2 MB.');return;}const reader=new FileReader();reader.onload=()=>{if(typeof reader.result==='string')setPhoto(reader.result);};reader.readAsDataURL(f);}}/></label></div>{description.length>=10&&<div className="rounded-md border border-border p-3"><p className="mb-2 text-xs text-success">Rule-based suggestion · {analysis.category} · {analysis.priority}</p><p className="text-xs leading-relaxed text-muted-foreground">{analysis.reason}</p><Button variant="link" size="sm" type="button" className="mt-1 px-0" onClick={()=>{setCategory(analysis.category);setPriority(analysis.priority);}}>Apply suggestion<ArrowRight/></Button></div>}{match&&<div className="rounded border border-warning/40 p-3 text-xs"><p className="text-warning">Possible duplicate: {match.title}</p><label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/>I reviewed this match and want to submit a separate report.</label></div>}<Button type="submit" className="w-full" disabled={saving}><Upload/>{saving?'Saving…':`Submit ${kind==='maintenance'?'request':'report'}`}</Button><p className="text-center text-[10px] text-muted-foreground">Shared campus demo · Visible to everyone using this app</p></form></Modal>;
+ const {add,items}=useCampus();
+ const [title,setTitle]=useState('');
+ const [description,setDescription]=useState('');
+ const [building,setBuilding]=useState('academic');
+ const [category,setCategory]=useState('Plumbing');
+ const [priority,setPriority]=useState<RecordItem['priority']>('Medium');
+ const [photo,setPhoto]=useState<string>();
+ const [reviewed,setReviewed]=useState(false);
+ const [saving,setSaving]=useState(false);
+ const [analyzing,setAnalyzing]=useState(false);
+ const [suggestion,setSuggestion]=useState<GemmaSuggestion>();
+ const analysis=classify(description);
+ const match=duplicate(title+' '+description,building,items);
+
+ async function analyze() {
+  if(description.trim().length<10){toast.error('Describe the issue in at least 10 characters before analyzing it.');return;}
+  setAnalyzing(true);
+  try {
+   const result=await analyzeCampusIncident({data:{description:description.trim(),...(photo?{imageDataUrl:photo}:{})}});
+   setSuggestion(result);
+  } catch(error) {
+   toast.error(error instanceof Error?error.message:'Gemma analysis failed. Try again or complete the report manually.');
+  } finally {
+   setAnalyzing(false);
+  }
+ }
+
+ function applySuggestion() {
+  if(!suggestion)return;
+  setTitle(suggestion.title);
+  setDescription(suggestion.description);
+  setCategory(suggestion.category);
+  setPriority(suggestion.priority);
+  setReviewed(false);
+  setSuggestion(undefined);
+ }
+
+ return <Modal title={kind==='maintenance'?'New maintenance request':'Report a campus issue'} onClose={onClose}>
+  <form className="space-y-4" onSubmit={async e=>{
+   e.preventDefault();
+   if(saving)return;
+   if(title.trim().length<5||description.trim().length<10){toast.error('Add a title of at least 5 characters and a description of at least 10.');return;}
+   if(match&&!reviewed){toast.error('Review the possible duplicate before submitting.');return;}
+   setSaving(true);
+   try {
+    await add({title:title.trim(),description:description.trim(),building,category,priority,kind,status:'Reported',team:'',...(photo?{photo}:{})});
+    onClose();
+   } catch {
+    // The save mutation displays the database error; keep the form open for retry.
+   } finally {
+    setSaving(false);
+   }
+  }}>
+   <label className="form-field">Title<input autoFocus value={title} onChange={e=>{setTitle(e.target.value);setReviewed(false);}} placeholder="e.g. Leaking tap in the science lab" minLength={5} maxLength={120} required/></label>
+   <label className="form-field">Description<textarea value={description} onChange={e=>{setDescription(e.target.value);setReviewed(false);setSuggestion(undefined);}} placeholder="Describe the issue and its location…" minLength={10} maxLength={2000} required/></label>
+   <div className="form-grid">
+    <label className="form-field">Building<select aria-label="Building" value={building} onChange={e=>{setBuilding(e.target.value);setReviewed(false);}}>{buildings.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+    <label className="form-field">Category<select aria-label="Category" value={category} onChange={e=>setCategory(e.target.value)}>{['Plumbing','Electrical','Infrastructure','Cleanliness','Safety','Other'].map(c=><option key={c}>{c}</option>)}</select></label>
+    <label className="form-field">Priority<select aria-label="Priority" value={priority} onChange={e=>setPriority(e.target.value as RecordItem['priority'])}>{['Low','Medium','High','Critical'].map(c=><option key={c}>{c}</option>)}</select></label>
+    <label className="form-field">Photo (optional, up to 2 MB)<input type="file" accept="image/png,image/jpeg,image/webp" className="w-full text-[10px]" onChange={e=>{
+     const f=e.target.files?.[0];
+     if(!f)return;
+     if(f.size>2*1024*1024||!['image/jpeg','image/png','image/webp'].includes(f.type)){toast.error('Use a JPG, PNG, or WebP image under 2 MB.');e.currentTarget.value='';return;}
+     const reader=new FileReader();
+     reader.onload=()=>{if(typeof reader.result==='string'){setPhoto(reader.result);setSuggestion(undefined);}};
+     reader.onerror=()=>toast.error('The photo could not be read. Please choose another image.');
+     reader.readAsDataURL(f);
+    }}/></label>
+   </div>
+   {description.length>=10&&<div className="rounded-md border border-border p-3">
+    <p className="mb-2 text-xs text-success">Rule-based suggestion · {analysis.category} · {analysis.priority}</p>
+    <p className="text-xs leading-relaxed text-muted-foreground">{analysis.reason}</p>
+    <Button variant="link" size="sm" type="button" className="mt-1 px-0" onClick={()=>{setCategory(analysis.category);setPriority(analysis.priority);}}>Apply suggestion<ArrowRight/></Button>
+   </div>}
+   <section className="rounded-md border border-border p-3">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+     <div><p className="text-xs font-medium">Gemma 4 report assistant</p><p className="mt-1 text-[10px] text-muted-foreground">Optional AI suggestions from your description and photo.</p></div>
+     <Button type="button" variant="outline" size="sm" onClick={analyze} disabled={analyzing||description.trim().length<10}>
+      {analyzing?<LoaderCircle className="animate-spin"/>:<Sparkles/>}{analyzing?'Analyzing…':'Analyze report'}
+     </Button>
+    </div>
+    <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">When you analyze, this description and any attached photo are sent to the configured Gemini API. Suggestions can be wrong; review them before applying.</p>
+    {suggestion&&<div className="mt-3 border-t border-border pt-3">
+     <p className="text-xs font-medium">{suggestion.title}</p>
+     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{suggestion.description}</p>
+     <p className="mt-2 text-[10px] text-success">{suggestion.category} · {suggestion.priority}</p>
+     <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">{suggestion.rationale}</p>
+     <Button type="button" variant="link" size="sm" className="mt-1 px-0" onClick={applySuggestion}>Apply AI suggestion<ArrowRight/></Button>
+    </div>}
+   </section>
+   {match&&<div className="rounded border border-warning/40 p-3 text-xs"><p className="text-warning">Possible duplicate: {match.title}</p><label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/>I reviewed this match and want to submit a separate report.</label></div>}
+   <Button type="submit" className="w-full" disabled={saving}><Upload/>{saving?'Saving…':`Submit ${kind==='maintenance'?'request':'report'}`}</Button>
+   <p className="text-center text-[10px] text-muted-foreground">Shared campus demo · Visible to everyone using this app</p>
+  </form>
+ </Modal>;
 }

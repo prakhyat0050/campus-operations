@@ -1,36 +1,806 @@
-import { useState } from 'react';
-import { Plus, ArrowUpRight, Search, Sparkles, Send, Leaf, Droplets, Zap, ShieldCheck, Lightbulb, ChevronRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useCampus } from '@/lib/campus/store';
-import { canPerformAction } from '@/lib/campus/access';
-import { buildings, buildingName, classify, readings, anomaly } from '@/lib/campus/data';
-import { CampusMap } from './map';
-import { ConsumptionChart, BuildingChart } from './charts';
-import { Modal, Priority, ReportForm, RecordDetail } from './dialogs';
-import { CampusSettings } from './settings';
+import { useState } from "react";
+import {
+  Plus,
+  ArrowUpRight,
+  Search,
+  Sparkles,
+  Send,
+  Leaf,
+  Droplets,
+  Zap,
+  ShieldCheck,
+  Lightbulb,
+  ChevronRight,
+  LoaderCircle,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useCampus } from "@/lib/campus/store";
+import { canPerformAction } from "@/lib/campus/access";
+import { buildings, buildingName, classify, readings, anomaly } from "@/lib/campus/data";
+import {
+  answerCampusQuestion,
+  generateSustainabilityPlan,
+  type CampusConversationTurn,
+  type SustainabilityPlan,
+} from "@/lib/campus/gemma";
+import { toast } from "sonner";
+import { CampusMap } from "./map";
+import { ConsumptionChart, BuildingChart } from "./charts";
+import { Modal, Priority, ReportForm, RecordDetail } from "./dialogs";
+import { CampusSettings } from "./settings";
 export const moduleLabels: Record<string, { title: string; subtitle: string }> = {
-    'digital-twin': { title: 'A connected campus.', subtitle: 'Explore buildings, facilities, and the signals that matter.' },
-    'ai-insights': { title: 'From signals to insight.', subtitle: 'Explainable analysis. Practical actions. Powered by your campus data.' },
-    maintenance: { title: 'Keep your campus moving.', subtitle: 'Track, assign, and resolve campus maintenance requests.' },
-    sustainability: { title: 'A greener tomorrow.', subtitle: 'Understand your resource footprint. Find opportunities to do better.' },
-    cybersecurity: { title: 'A safer digital campus.', subtitle: 'Review security records and campus access events.' },
-    'community-reports': { title: 'Your campus. Your voice.', subtitle: 'Report an issue or share an idea for a better campus.' },
-    settings: { title: 'Workspace settings', subtitle: 'Manage your profile, campus role, and record exports.' }
+  "digital-twin": {
+    title: "A connected campus.",
+    subtitle: "Explore buildings, facilities, and the signals that matter.",
+  },
+  "ai-insights": {
+    title: "From signals to insight.",
+    subtitle: "Explainable analysis. Practical actions. Powered by your campus data.",
+  },
+  maintenance: {
+    title: "Keep your campus moving.",
+    subtitle: "Track, assign, and resolve campus maintenance requests.",
+  },
+  sustainability: {
+    title: "A greener tomorrow.",
+    subtitle: "Understand your resource footprint. Find opportunities to do better.",
+  },
+  cybersecurity: {
+    title: "A safer digital campus.",
+    subtitle: "Review security records and campus access events.",
+  },
+  "community-reports": {
+    title: "Your campus. Your voice.",
+    subtitle: "Report an issue or share an idea for a better campus.",
+  },
+  settings: {
+    title: "Workspace settings",
+    subtitle: "Manage your profile, campus role, and record exports.",
+  },
 };
-export function ModulePage({ module }: { module: string }) { const heading = moduleLabels[module]; const { role } = useCampus(); const restricted = module === 'cybersecurity' && !canPerformAction(role, 'view_security'); return <><div className="grid-heading mb-7"><p className="eyebrow mb-3">CAMPUS OPERATIONS / {module.replaceAll('-', ' ')}</p><h1 className="section-heading">{heading?.title}</h1><p className="mt-3 text-xs text-muted-foreground">{heading?.subtitle}</p></div>{restricted ? <section className="panel empty-state" role="status"><h2 className="font-medium text-foreground">Restricted workspace</h2><p className="mt-2">Your {role} role does not include access to security records.</p></section> : module === 'digital-twin' ? <CampusMap large /> : module === 'maintenance' ? <Records kind="maintenance" /> : module === 'community-reports' ? <Records kind="community" /> : module === 'cybersecurity' ? <Records kind="security" /> : module === 'sustainability' ? <Sustainability /> : module === 'ai-insights' ? <Insights /> : <CampusSettings />}</>; }
-function Records({ kind }: { kind: 'maintenance' | 'community' | 'security' }) {
-    const { items, loading, loadError, refresh } = useCampus(); const [query, setQuery] = useState(''); const [status, setStatus] = useState('all'); const [severity, setSeverity] = useState('all'); const [form, setForm] = useState(false); const [detail, setDetail] = useState<string>(); const [ideas, setIdeas] = useState(false);
-    const records = items.filter(i => i.kind === kind); const filtered = records.filter(i => (status === 'all' || i.status === status) && (severity === 'all' || i.priority === severity) && `${i.title} ${i.id} ${buildingName(i.building)}`.toLowerCase().includes(query.toLowerCase()));
-    return <>{kind === 'security' && <div className="module-grid mb-5">{[{ label: 'Open security alerts', value: records.filter(i => i.status !== 'Resolved').length }, { label: 'Sample failed logins', value: records.length * 8 }, { label: 'Detection threshold', value: '5 / 10 min' }].map(m => <div key={m.label} className="panel p-5"><p className="text-xs text-muted-foreground">{m.label}</p><p className="mt-3 text-3xl">{m.value}</p><p className="mt-2 text-[10px] text-warning">Simulated event data</p></div>)}</div>}<div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap gap-2"><div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><input aria-label="Search records" placeholder="Search reports or buildings…" className="w-64 pl-9 text-xs" value={query} onChange={e => setQuery(e.target.value)} /></div><select aria-label="Filter by status" value={status} onChange={e => setStatus(e.target.value)} className="text-xs"><option value="all">All statuses</option>{['Reported', 'Under Review', 'Assigned', 'In Progress', 'Resolved'].map(s => <option key={s}>{s}</option>)}</select><select aria-label="Filter by priority" value={severity} onChange={e => setSeverity(e.target.value)} className="text-xs"><option value="all">All priorities</option>{['Critical', 'High', 'Medium', 'Low'].map(s => <option key={s}>{s}</option>)}</select></div>{kind !== 'security' && <Button onClick={() => setForm(true)}><Plus />{kind === 'maintenance' ? 'New request' : 'Report an issue'}</Button>}</div><section className="panel"><div className="panel-heading"><h2 className="panel-title">{kind === 'security' ? 'Security event log' : kind === 'community' ? 'Community reports' : 'Maintenance requests'}</h2><span className="text-xs text-muted-foreground">{loading ? 'Loading…' : `${filtered.length} records`}</span></div><div className="overflow-x-auto">{loadError ? <div className="empty-state" role="alert"><p>{loadError}</p><Button variant="outline" className="mt-3" onClick={refresh}>Retry loading reports</Button></div> : <><table className="data-table"><thead><tr><th>Request</th><th>Building</th><th>Priority</th><th>Team</th><th>Status</th><th /></tr></thead><tbody>{filtered.map(i => <tr key={i.id} tabIndex={0} role="button" aria-label={`View ${i.title}`} onClick={() => setDetail(i.id)} onKeyDown={e => { if (e.key === 'Enter') setDetail(i.id); }}><td><p className="font-medium">{i.title}</p><p className="mt-1 text-[10px] text-muted-foreground">{i.id} · {i.category}</p></td><td className="text-muted-foreground">{buildingName(i.building)}</td><td><Priority value={i.priority} /></td><td className="text-muted-foreground">{i.team || 'Unassigned'}</td><td>{i.status}</td><td><ArrowUpRight className="h-3 w-3" /></td></tr>)}</tbody></table>{!loading && !filtered.length && <div className="empty-state">No reports match these filters.</div>}</>}</div></section>{kind === 'security' && <div className="mt-5 flex gap-3 border-t border-border pt-5 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="h-5 w-5 shrink-0 text-success" /><p>Rule: flag more than 5 failed logins in a 10-minute window. Current sample: 8. An unusual pattern is not proof of an attack. No real accounts or devices are monitored.</p></div>}{kind === 'community' && <section className="mt-7"><div className="mb-4 flex items-center justify-between"><h2 className="font-display text-3xl">Campus ideas</h2><Button variant="outline" onClick={() => setIdeas(true)}><Lightbulb />Share an idea</Button></div><div className="module-grid">{items.filter(i => i.category === 'Campus idea').map(i => <div className="panel p-5" key={i.id}><Lightbulb className="mb-3 h-5 w-5 text-success" /><h3>{i.title}</h3><p className="mt-2 text-xs leading-relaxed text-muted-foreground">{i.description}</p><Button variant="link" size="sm" className="mt-2 px-0" onClick={() => setDetail(i.id)}>View idea<ArrowUpRight /></Button></div>)}<div className="panel p-5"><Leaf className="mb-3 h-5 w-5 text-success" /><h3>Solar-powered study spaces</h3><p className="mt-2 text-xs leading-relaxed text-muted-foreground">A sample campus proposal: add solar-powered charging points near the Green Zone.</p><span className="mt-4 block text-[10px] text-muted-foreground">Fictional proposal · Open for discussion</span></div></div></section>}{form && kind !== 'security' && <ReportForm kind={kind} onClose={() => setForm(false)} />}{detail && <RecordDetail id={detail} onClose={() => setDetail(undefined)} />}{ideas && <IdeaForm onClose={() => setIdeas(false)} />}</>;
+export function ModulePage({ module }: { module: string }) {
+  const heading = moduleLabels[module];
+  const { role } = useCampus();
+  const restricted = module === "cybersecurity" && !canPerformAction(role, "view_security");
+  return (
+    <>
+      <div className="grid-heading mb-7">
+        <p className="eyebrow mb-3">CAMPUS OPERATIONS / {module.replaceAll("-", " ")}</p>
+        <h1 className="section-heading">{heading?.title}</h1>
+        <p className="mt-3 text-xs text-muted-foreground">{heading?.subtitle}</p>
+      </div>
+      {restricted ? (
+        <section className="panel empty-state" role="status">
+          <h2 className="font-medium text-foreground">Restricted workspace</h2>
+          <p className="mt-2">Your {role} role does not include access to security records.</p>
+        </section>
+      ) : module === "digital-twin" ? (
+        <CampusMap large />
+      ) : module === "maintenance" ? (
+        <Records kind="maintenance" />
+      ) : module === "community-reports" ? (
+        <Records kind="community" />
+      ) : module === "cybersecurity" ? (
+        <Records kind="security" />
+      ) : module === "sustainability" ? (
+        <Sustainability />
+      ) : module === "ai-insights" ? (
+        <Insights />
+      ) : (
+        <CampusSettings />
+      )}
+    </>
+  );
 }
-function IdeaForm({ onClose }: { onClose: () => void }) { const { add } = useCampus(); const [title, setTitle] = useState(''); const [text, setText] = useState(''); return <Modal title="Share a campus idea" onClose={onClose}><form className="space-y-4" onSubmit={e => { e.preventDefault(); add({ title, description: text, building: 'green', category: 'Campus idea', priority: 'Low', status: 'Under Review', team: 'Sustainability team', kind: 'community' }); onClose(); }}><label className="form-field">Idea title<input required minLength={5} maxLength={120} value={title} onChange={e => setTitle(e.target.value)} /></label><label className="form-field">How would it improve campus?<textarea required minLength={10} maxLength={2000} value={text} onChange={e => setText(e.target.value)} /></label><Button type="submit" className="w-full"><Plus />Submit for review</Button></form></Modal>; }
+function Records({ kind }: { kind: "maintenance" | "community" | "security" }) {
+  const { items, loading, loadError, refresh } = useCampus();
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [severity, setSeverity] = useState("all");
+  const [form, setForm] = useState(false);
+  const [detail, setDetail] = useState<string>();
+  const [ideas, setIdeas] = useState(false);
+  const records = items.filter((i) => i.kind === kind);
+  const filtered = records.filter(
+    (i) =>
+      (status === "all" || i.status === status) &&
+      (severity === "all" || i.priority === severity) &&
+      `${i.title} ${i.id} ${buildingName(i.building)}`.toLowerCase().includes(query.toLowerCase()),
+  );
+  return (
+    <>
+      {kind === "security" && (
+        <div className="module-grid mb-5">
+          {[
+            {
+              label: "Open security alerts",
+              value: records.filter((i) => i.status !== "Resolved").length,
+            },
+            { label: "Sample failed logins", value: records.length * 8 },
+            { label: "Detection threshold", value: "5 / 10 min" },
+          ].map((m) => (
+            <div key={m.label} className="panel p-5">
+              <p className="text-xs text-muted-foreground">{m.label}</p>
+              <p className="mt-3 text-3xl">{m.value}</p>
+              <p className="mt-2 text-[10px] text-warning">Simulated event data</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <input
+              aria-label="Search records"
+              placeholder="Search reports or buildings…"
+              className="w-64 pl-9 text-xs"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <select
+            aria-label="Filter by status"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="text-xs"
+          >
+            <option value="all">All statuses</option>
+            {["Reported", "Under Review", "Assigned", "In Progress", "Resolved"].map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter by priority"
+            value={severity}
+            onChange={(e) => setSeverity(e.target.value)}
+            className="text-xs"
+          >
+            <option value="all">All priorities</option>
+            {["Critical", "High", "Medium", "Low"].map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+        {kind !== "security" && (
+          <Button onClick={() => setForm(true)}>
+            <Plus />
+            {kind === "maintenance" ? "New request" : "Report an issue"}
+          </Button>
+        )}
+      </div>
+      <section className="panel">
+        <div className="panel-heading">
+          <h2 className="panel-title">
+            {kind === "security"
+              ? "Security event log"
+              : kind === "community"
+                ? "Community reports"
+                : "Maintenance requests"}
+          </h2>
+          <span className="text-xs text-muted-foreground">
+            {loading ? "Loading…" : `${filtered.length} records`}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          {loadError ? (
+            <div className="empty-state" role="alert">
+              <p>{loadError}</p>
+              <Button variant="outline" className="mt-3" onClick={refresh}>
+                Retry loading reports
+              </Button>
+            </div>
+          ) : (
+            <>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Request</th>
+                    <th>Building</th>
+                    <th>Priority</th>
+                    <th>Team</th>
+                    <th>Status</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((i) => (
+                    <tr
+                      key={i.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`View ${i.title}`}
+                      onClick={() => setDetail(i.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") setDetail(i.id);
+                      }}
+                    >
+                      <td>
+                        <p className="font-medium">{i.title}</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          {i.id} · {i.category}
+                        </p>
+                      </td>
+                      <td className="text-muted-foreground">{buildingName(i.building)}</td>
+                      <td>
+                        <Priority value={i.priority} />
+                      </td>
+                      <td className="text-muted-foreground">{i.team || "Unassigned"}</td>
+                      <td>{i.status}</td>
+                      <td>
+                        <ArrowUpRight className="h-3 w-3" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!loading && !filtered.length && (
+                <div className="empty-state">No reports match these filters.</div>
+              )}
+            </>
+          )}
+        </div>
+      </section>
+      {kind === "security" && (
+        <div className="mt-5 flex gap-3 border-t border-border pt-5 text-xs leading-relaxed text-muted-foreground">
+          <ShieldCheck className="h-5 w-5 shrink-0 text-success" />
+          <p>
+            Rule: flag more than 5 failed logins in a 10-minute window. Current sample: 8. An
+            unusual pattern is not proof of an attack. No real accounts or devices are monitored.
+          </p>
+        </div>
+      )}
+      {kind === "community" && (
+        <section className="mt-7">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-display text-3xl">Campus ideas</h2>
+            <Button variant="outline" onClick={() => setIdeas(true)}>
+              <Lightbulb />
+              Share an idea
+            </Button>
+          </div>
+          <div className="module-grid">
+            {items
+              .filter((i) => i.category === "Campus idea")
+              .map((i) => (
+                <div className="panel p-5" key={i.id}>
+                  <Lightbulb className="mb-3 h-5 w-5 text-success" />
+                  <h3>{i.title}</h3>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    {i.description}
+                  </p>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="mt-2 px-0"
+                    onClick={() => setDetail(i.id)}
+                  >
+                    View idea
+                    <ArrowUpRight />
+                  </Button>
+                </div>
+              ))}
+            <div className="panel p-5">
+              <Leaf className="mb-3 h-5 w-5 text-success" />
+              <h3>Solar-powered study spaces</h3>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                A sample campus proposal: add solar-powered charging points near the Green Zone.
+              </p>
+              <span className="mt-4 block text-[10px] text-muted-foreground">
+                Fictional proposal · Open for discussion
+              </span>
+            </div>
+          </div>
+        </section>
+      )}
+      {form && kind !== "security" && <ReportForm kind={kind} onClose={() => setForm(false)} />}
+      {detail && <RecordDetail id={detail} onClose={() => setDetail(undefined)} />}
+      {ideas && <IdeaForm onClose={() => setIdeas(false)} />}
+    </>
+  );
+}
+function IdeaForm({ onClose }: { onClose: () => void }) {
+  const { add } = useCampus();
+  const [title, setTitle] = useState("");
+  const [text, setText] = useState("");
+  return (
+    <Modal title="Share a campus idea" onClose={onClose}>
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          add({
+            title,
+            description: text,
+            building: "green",
+            category: "Campus idea",
+            priority: "Low",
+            status: "Under Review",
+            team: "Sustainability team",
+            kind: "community",
+          });
+          onClose();
+        }}
+      >
+        <label className="form-field">
+          Idea title
+          <input
+            required
+            minLength={5}
+            maxLength={120}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </label>
+        <label className="form-field">
+          How would it improve campus?
+          <textarea
+            required
+            minLength={10}
+            maxLength={2000}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </label>
+        <Button type="submit" className="w-full">
+          <Plus />
+          Submit for review
+        </Button>
+      </form>
+    </Modal>
+  );
+}
 function Sustainability() {
-    const [reduction, setReduction] = useState(15); const [waterReduction, setWaterReduction] = useState(10); const [factor, setFactor] = useState(.4); const [mode, setMode] = useState<'energy' | 'water'>('energy'); const [building, setBuilding] = useState('all');
-    const selected = buildings.filter(b => building === 'all' || b.id === building); const energy = selected.reduce((s, b) => s + b.energy, 0); const water = selected.reduce((s, b) => s + b.water, 0); const saving = energy * reduction / 100;
-    return <><div className="module-grid mb-5">{[{ icon: Zap, title: 'Daily energy consumption', value: `${(energy / 1000).toFixed(2)} MWh`, color: 'text-success' }, { icon: Droplets, title: 'Daily water consumption', value: `${(water / 1000).toFixed(1)} kL`, color: 'text-info' }, { icon: Leaf, title: 'Estimated daily emissions', value: `${(energy * factor / 1000).toFixed(2)} t CO₂e`, color: 'text-warning' }].map(k => <div key={k.title} className="panel p-5"><div className="flex justify-between text-xs text-muted-foreground">{k.title}<k.icon className={`h-4 w-4 ${k.color}`} /></div><p className="mt-4 text-3xl">{k.value}</p><p className="mt-2 text-[10px] text-muted-foreground">Estimate from simulated readings</p></div>)}</div><div className="mb-5 flex justify-end"><select aria-label="Sustainability building" value={building} onChange={e => setBuilding(e.target.value)} className="text-xs"><option value="all">All buildings</option>{buildings.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div><div className="overview-grid"><ConsumptionChart building={building} /><section className="panel"><div className="panel-heading"><h2 className="panel-title">Consumption by building</h2><select aria-label="Building consumption metric" value={mode} onChange={e => setMode(e.target.value as 'energy' | 'water')} className="min-h-7 py-1 text-xs"><option value="energy">Energy</option><option value="water">Water</option></select></div><BuildingChart mode={mode} /></section></div><div className="bottom-grid"><section className="panel p-6"><h2 className="mb-2 font-display text-3xl">What if we used less?</h2><p className="mb-6 text-xs text-muted-foreground">Hypothetical daily impact on the selected building baseline. Not verified savings.</p><label className="form-field">Energy reduction <span className="float-right text-success">{reduction}%</span><input aria-label="Energy reduction percentage" type="range" min={0} max={50} value={reduction} onChange={e => setReduction(+e.target.value)} className="w-full accent-success" /></label><label className="form-field mt-4">Water reduction <span className="text-info">{waterReduction}%</span><input aria-label="Water reduction percentage" type="range" min={0} max={50} value={waterReduction} onChange={e => setWaterReduction(+e.target.value)} className="w-full accent-info" /></label><div className="mt-5 grid grid-cols-3 gap-3 border-t border-border pt-5"><div><p className="text-[10px] text-muted-foreground">Energy saved</p><p className="mt-2 text-lg text-success">{saving.toFixed(0)} kWh</p></div><div><p className="text-[10px] text-muted-foreground">Water saved</p><p className="mt-2 text-lg text-info">{(water * waterReduction / 100).toFixed(0)} L</p></div><div><p className="text-[10px] text-muted-foreground">CO₂e avoided</p><p className="mt-2 text-lg">{(saving * factor).toFixed(0)} kg</p></div></div><label className="form-field mt-5">Conversion factor (kg CO₂e / kWh)<input type="number" min="0" max="2" step="0.01" value={factor} onChange={e => setFactor(Math.min(2, Math.max(0, +e.target.value)))} /></label></section><section className="panel p-6"><h2 className="mb-4 text-sm">A transparent sustainability score</h2><p className="font-display text-5xl text-success">{Math.round(100 - 20 * readings.reduce((s, r) => s + r.energy, 0) / readings.reduce((s, r) => s + r.baseline, 0))}<span className="font-sans text-sm text-muted-foreground"> / 100</span></p><p className="mt-4 text-xs leading-relaxed text-muted-foreground">Score = round(100 − 20 × weekly energy / weekly energy baseline). Sample weekly readings: 129.1 MWh; baseline: 146.8 MWh. This demo score measures energy performance only, not certified sustainability.</p><div className="mt-5 border-t border-border pt-5"><h3 className="mb-2 text-xs">Waste & recycling</h3><p className="text-xs leading-relaxed text-muted-foreground">Cafeteria recycling collection requires attention. Segregate paper, plastics, and organic waste before collection.</p></div></section></div></>;
+  const [reduction, setReduction] = useState(15);
+  const [waterReduction, setWaterReduction] = useState(10);
+  const [factor, setFactor] = useState(0.4);
+  const [mode, setMode] = useState<"energy" | "water">("energy");
+  const [building, setBuilding] = useState("all");
+  const selected = buildings.filter((b) => building === "all" || b.id === building);
+  const energy = selected.reduce((s, b) => s + b.energy, 0);
+  const water = selected.reduce((s, b) => s + b.water, 0);
+  const saving = (energy * reduction) / 100;
+  return (
+    <>
+      <div className="mb-5 flex justify-end">
+        <select
+          aria-label="Sustainability building"
+          value={building}
+          onChange={(e) => setBuilding(e.target.value)}
+          className="text-xs"
+        >
+          <option value="all">All buildings</option>
+          {buildings.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <SustainabilityPlanner
+        key={building}
+        building={
+          building === "all"
+            ? "All buildings"
+            : (buildings.find((b) => b.id === building)?.name ?? "Campus")
+        }
+        energy={energy}
+        water={water}
+      />
+      <div className="module-grid mb-5">
+        {[
+          {
+            icon: Zap,
+            title: "Daily energy consumption",
+            value: `${(energy / 1000).toFixed(2)} MWh`,
+            color: "text-success",
+          },
+          {
+            icon: Droplets,
+            title: "Daily water consumption",
+            value: `${(water / 1000).toFixed(1)} kL`,
+            color: "text-info",
+          },
+          {
+            icon: Leaf,
+            title: "Estimated daily emissions",
+            value: `${((energy * factor) / 1000).toFixed(2)} t CO₂e`,
+            color: "text-warning",
+          },
+        ].map((k) => (
+          <div key={k.title} className="panel p-5">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              {k.title}
+              <k.icon className={`h-4 w-4 ${k.color}`} />
+            </div>
+            <p className="mt-4 text-3xl">{k.value}</p>
+            <p className="mt-2 text-[10px] text-muted-foreground">
+              Estimate from simulated readings
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="overview-grid">
+        <ConsumptionChart building={building} />
+        <section className="panel">
+          <div className="panel-heading">
+            <h2 className="panel-title">Consumption by building</h2>
+            <select
+              aria-label="Building consumption metric"
+              value={mode}
+              onChange={(e) => setMode(e.target.value as "energy" | "water")}
+              className="min-h-7 py-1 text-xs"
+            >
+              <option value="energy">Energy</option>
+              <option value="water">Water</option>
+            </select>
+          </div>
+          <BuildingChart mode={mode} />
+        </section>
+      </div>
+      <div className="bottom-grid">
+        <section className="panel p-6">
+          <h2 className="mb-2 font-display text-3xl">What if we used less?</h2>
+          <p className="mb-6 text-xs text-muted-foreground">
+            Hypothetical daily impact on the selected building baseline. Not verified savings.
+          </p>
+          <label className="form-field">
+            Energy reduction <span className="float-right text-success">{reduction}%</span>
+            <input
+              aria-label="Energy reduction percentage"
+              type="range"
+              min={0}
+              max={50}
+              value={reduction}
+              onChange={(e) => setReduction(+e.target.value)}
+              className="w-full accent-success"
+            />
+          </label>
+          <label className="form-field mt-4">
+            Water reduction <span className="text-info">{waterReduction}%</span>
+            <input
+              aria-label="Water reduction percentage"
+              type="range"
+              min={0}
+              max={50}
+              value={waterReduction}
+              onChange={(e) => setWaterReduction(+e.target.value)}
+              className="w-full accent-info"
+            />
+          </label>
+          <div className="mt-5 grid grid-cols-3 gap-3 border-t border-border pt-5">
+            <div>
+              <p className="text-[10px] text-muted-foreground">Energy saved</p>
+              <p className="mt-2 text-lg text-success">{saving.toFixed(0)} kWh</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Water saved</p>
+              <p className="mt-2 text-lg text-info">
+                {((water * waterReduction) / 100).toFixed(0)} L
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">CO₂e avoided</p>
+              <p className="mt-2 text-lg">{(saving * factor).toFixed(0)} kg</p>
+            </div>
+          </div>
+          <label className="form-field mt-5">
+            Conversion factor (kg CO₂e / kWh)
+            <input
+              type="number"
+              min="0"
+              max="2"
+              step="0.01"
+              value={factor}
+              onChange={(e) => setFactor(Math.min(2, Math.max(0, +e.target.value)))}
+            />
+          </label>
+        </section>
+        <section className="panel p-6">
+          <h2 className="mb-4 text-sm">A transparent sustainability score</h2>
+          <p className="font-display text-5xl text-success">
+            {Math.round(
+              100 -
+                (20 * readings.reduce((s, r) => s + r.energy, 0)) /
+                  readings.reduce((s, r) => s + r.baseline, 0),
+            )}
+            <span className="font-sans text-sm text-muted-foreground"> / 100</span>
+          </p>
+          <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+            Score = round(100 − 20 × weekly energy / weekly energy baseline). Sample weekly
+            readings: 129.1 MWh; baseline: 146.8 MWh. This demo score measures energy performance
+            only, not certified sustainability.
+          </p>
+          <div className="mt-5 border-t border-border pt-5">
+            <h3 className="mb-2 text-xs">Waste & recycling</h3>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Cafeteria recycling collection requires attention. Segregate paper, plastics, and
+              organic waste before collection.
+            </p>
+          </div>
+        </section>
+      </div>
+    </>
+  );
+}
+function SustainabilityPlanner({
+  building,
+  energy,
+  water,
+}: {
+  building: string;
+  energy: number;
+  water: number;
+}) {
+  const { items } = useCampus();
+  const [plan, setPlan] = useState<SustainabilityPlan>();
+  const [generating, setGenerating] = useState(false);
+  const reports = items
+    .filter(
+      (item) =>
+        item.kind === "maintenance" &&
+        (building === "All buildings" || buildingName(item.building) === building),
+    )
+    .slice(0, 10)
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      description: item.description.slice(0, 500),
+      priority: item.priority,
+      status: item.status,
+    }));
+
+  async function createPlan() {
+    setGenerating(true);
+    try {
+      const result = await generateSustainabilityPlan({
+        data: {
+          context: {
+            building,
+            dailyEnergyKwh: energy,
+            dailyWaterLiters: water,
+            weeklyReadings: readings,
+            maintenanceReports: reports,
+          },
+        },
+      });
+      setPlan(result);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Gemma could not create an action plan. Try again.",
+      );
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <section className="panel mb-5 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-2xl">
+          <h2 className="mb-2 flex items-center gap-2 text-sm">
+            <Sparkles className="h-4 w-4 text-success" />
+            Gemma 4 sustainability action plan
+          </h2>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Generate practical actions from {building.toLowerCase()} consumption readings and
+            related maintenance reports. Recommendations cite the supplied evidence and avoid
+            invented savings.
+          </p>
+        </div>
+        <Button onClick={() => void createPlan()} disabled={generating}>
+          {generating ? <LoaderCircle className="animate-spin" /> : <Sparkles />}
+          {generating
+            ? "Reviewing evidence…"
+            : plan
+              ? "Refresh action plan"
+              : "Generate action plan"}
+        </Button>
+      </div>
+      <p className="mt-3 text-[10px] leading-relaxed text-muted-foreground">
+        Only when requested, this data and the campus readings below are sent to Gemini. Readings
+        are simulated; AI suggestions are not verified savings or professional advice.
+      </p>
+      {plan && (
+        <div className="mt-5 border-t border-border pt-4" aria-live="polite">
+          <p className="mb-4 text-xs leading-relaxed">{plan.summary}</p>
+          <div className="grid gap-3 md:grid-cols-3">
+            {plan.actions.map((action, index) => (
+              <article
+                className="rounded border border-border p-4"
+                key={`${index}-${action.title}`}
+              >
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <h3 className="text-xs font-medium">
+                    {index + 1}. {action.title}
+                  </h3>
+                  <span className="shrink-0 rounded border border-border px-2 py-1 text-[9px] text-muted-foreground">
+                    {action.effort} effort
+                  </span>
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">{action.action}</p>
+                <p className="mt-3 text-[10px] leading-relaxed">
+                  <span className="text-success">Evidence:</span> {action.evidence}
+                </p>
+                <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                  <span className="text-foreground">Verify:</span> {action.verification}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }
 function Insights() {
-    const { items } = useCampus(); const [description, setDescription] = useState(''); const [question, setQuestion] = useState(''); const [messages, setMessages] = useState<{ question: string; answer: string }[]>([]); const analysis = description.trim().length >= 5 ? classify(description) : null;
-    const ask = (q: string) => { if (!q.trim()) return; const lower = q.toLowerCase(); const open = items.filter(i => i.status !== 'Resolved'); let answer = 'That information is not available in the current campus dataset. I can answer questions about incidents, maintenance, energy, water, and security.'; if (/energy|electric/.test(lower)) answer = `The sample daily energy total is ${buildings.reduce((s, b) => s + b.energy, 0).toLocaleString()} kWh. Weekly sample usage is ${readings.reduce((s, r) => s + r.energy, 0).toFixed(1)} MWh versus a ${readings.reduce((s, r) => s + r.baseline, 0).toFixed(1)} MWh baseline. Science Block has a simulated anomaly: 3,800 vs 2,860 kWh (+32.9%).`; else if (/water|leak/.test(lower)) answer = `Sample campus water usage is ${buildings.reduce((s, b) => s + b.water, 0).toLocaleString()} L/day. The Academic Block alert compares 9,600 L observed to 8,000 L baseline (+20%). A plumbing inspection is recommended.`; else if (/security|login|access/.test(lower)) answer = `There are ${open.filter(i => i.kind === 'security').length} open simulated security events. The failed-login rule flags more than 5 attempts in 10 minutes; the sample event contains 8. This does not prove an attack.`; else if (/incident|maintenance|priorit|open|report/.test(lower)) answer = `There are ${open.length} open campus incidents, including ${open.filter(i => i.kind === 'maintenance').length} maintenance requests and ${open.filter(i => i.priority === 'Critical').length} critical records. Prioritize: ${open.filter(i => i.priority === 'Critical' || i.priority === 'High').map(i => `${i.title} (${buildingName(i.building)})`).join('; ') || 'no high-priority records'}.`; setMessages(prev => [...prev, { question: q, answer }]); setQuestion(''); };
-    return <div className="overview-grid"><section className="panel p-6"><h2 className="mb-2 flex items-center gap-2 text-sm"><Sparkles className="h-4 w-4 text-success" />Campus assistant</h2><p className="mb-5 text-[10px] text-muted-foreground">RULE-BASED DEMO · ANSWERS FROM SHARED CAMPUS DATA</p><div className="mb-5 min-h-64 space-y-4">{!messages.length ? <div className="py-10"><p className="mb-4 font-display text-3xl">What’s happening on campus?</p><div className="flex flex-wrap gap-2">{['What are the maintenance priorities?', 'How much energy are we using?', 'Any security alerts?'].map(q => <Button key={q} variant="outline" size="sm" className="h-auto whitespace-normal py-2 text-left text-xs" onClick={() => ask(q)}>{q}<ArrowUpRight /></Button>)}</div></div> : messages.map((m, i) => <div key={i}><p className="mb-2 text-sm font-medium">{m.question}</p><div className="border-l-2 border-success pl-3 text-xs leading-7 text-muted-foreground">{m.answer}</div></div>)}</div><form className="flex gap-2" onSubmit={e => { e.preventDefault(); ask(question); }}><input aria-label="Ask campus assistant" placeholder="Ask about your campus…" className="min-w-0 flex-1 text-xs" value={question} onChange={e => setQuestion(e.target.value)} maxLength={500} required /><Button size="icon" type="submit" aria-label="Send question"><Send /></Button></form></section><div className="space-y-5"><section className="panel p-6"><h2 className="mb-2 text-sm">Classify a campus complaint</h2><p className="mb-4 text-xs text-muted-foreground">Transparent keyword rules, not an external AI model.</p><textarea aria-label="Complaint to classify" placeholder="Describe a campus issue…" className="w-full text-xs" value={description} onChange={e => setDescription(e.target.value)} maxLength={2000} />{analysis && <div className="mt-5"><div className="mb-3 flex items-center justify-between"><span className="text-sm">{analysis.category}</span><Priority value={analysis.priority} /></div><p className="mb-3 text-xs leading-relaxed text-muted-foreground">{analysis.reason}</p><p className="text-xs leading-relaxed text-success">{analysis.action}</p></div>}</section><section className="panel p-6"><h2 className="mb-3 text-sm">Anomaly detection</h2><p className="text-xs leading-relaxed text-muted-foreground">Flag observed readings more than 15% above their baseline. Water: 9,600 L vs 8,000 L → +{anomaly(9600, 8000).change.toFixed(0)}%. Energy: 3,800 kWh vs 2,860 kWh → +{anomaly(3800, 2860).change.toFixed(1)}%. All readings are simulated.</p></section></div></div>;
+  const { items, role } = useCampus();
+  const [description, setDescription] = useState("");
+  const [question, setQuestion] = useState("");
+  const [messages, setMessages] = useState<CampusConversationTurn[]>([]);
+  const [asking, setAsking] = useState(false);
+  const analysis = description.trim().length >= 5 ? classify(description) : null;
+  const canViewSecurity = canPerformAction(role, "view_security");
+  const context = {
+    records: items
+      .filter((item) => canViewSecurity || item.kind !== "security")
+      .slice(0, 40)
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        description: item.description.slice(0, 500),
+        building: buildingName(item.building),
+        category: item.category,
+        priority: item.priority,
+        status: item.status,
+        kind: item.kind,
+      })),
+    buildings: buildings.map(({ name, energy, water }) => ({ name, energy, water })),
+    readings: readings.map(({ day, energy, water, baseline }) => ({
+      day,
+      energy,
+      water,
+      baseline,
+    })),
+  };
+
+  const ask = async (value: string) => {
+    const prompt = value.trim();
+    if (!prompt || asking) return;
+    setAsking(true);
+    try {
+      const result = await answerCampusQuestion({
+        data: { question: prompt, context, history: messages.slice(-5) },
+      });
+      setMessages((previous) => [...previous, { question: prompt, answer: result.answer }]);
+      setQuestion("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gemma could not answer. Try again.");
+    } finally {
+      setAsking(false);
+    }
+  };
+
+  return (
+    <div className="overview-grid">
+      <section className="panel p-6">
+        <h2 className="mb-2 flex items-center gap-2 text-sm">
+          <Sparkles className="h-4 w-4 text-success" />
+          Gemma 4 campus assistant
+        </h2>
+        <p className="mb-3 text-[10px] text-muted-foreground">
+          GROUNDED IN CAMPUS REPORTS AND SIMULATED READINGS
+        </p>
+        <p className="mb-5 text-[10px] leading-relaxed text-muted-foreground">
+          Questions, recent chat, and campus context are sent to Gemini when you ask. Answers may be
+          wrong; verify important details against the records.
+        </p>
+        <div className="mb-5 min-h-64 space-y-4" aria-live="polite">
+          {!messages.length ? (
+            <div className="py-10">
+              <p className="mb-4 font-display text-3xl">What’s happening on campus?</p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  "What are the maintenance priorities?",
+                  "How much energy are we using?",
+                  ...(canViewSecurity ? ["Any security alerts?"] : []),
+                ].map((prompt) => (
+                  <Button
+                    key={prompt}
+                    variant="outline"
+                    size="sm"
+                    className="h-auto whitespace-normal py-2 text-left text-xs"
+                    onClick={() => void ask(prompt)}
+                    disabled={asking}
+                  >
+                    {prompt}
+                    <ArrowUpRight />
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            messages.map((message, index) => (
+              <div key={`${index}-${message.question}`}>
+                <p className="mb-2 text-sm font-medium">{message.question}</p>
+                <div className="border-l-2 border-success pl-3 text-xs leading-7 text-muted-foreground">
+                  {message.answer}
+                </div>
+              </div>
+            ))
+          )}
+          {asking && (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              Gemma is checking the campus context…
+            </p>
+          )}
+        </div>
+        <form
+          className="flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void ask(question);
+          }}
+        >
+          <input
+            aria-label="Ask campus assistant"
+            placeholder="Ask about your campus…"
+            className="min-w-0 flex-1 text-xs"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            maxLength={500}
+            required
+            disabled={asking}
+          />
+          <Button
+            size="icon"
+            type="submit"
+            aria-label="Send question"
+            disabled={asking || question.trim().length < 3}
+          >
+            {asking ? <LoaderCircle className="animate-spin" /> : <Send />}
+          </Button>
+        </form>
+      </section>
+      <div className="space-y-5">
+        <section className="panel p-6">
+          <h2 className="mb-2 text-sm">Classify a campus complaint</h2>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Transparent keyword rules for a quick, explainable suggestion.
+          </p>
+          <textarea
+            aria-label="Complaint to classify"
+            placeholder="Describe a campus issue…"
+            className="w-full text-xs"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            maxLength={2000}
+          />
+          {analysis && (
+            <div className="mt-5">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-sm">{analysis.category}</span>
+                <Priority value={analysis.priority} />
+              </div>
+              <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+                {analysis.reason}
+              </p>
+              <p className="text-xs leading-relaxed text-success">{analysis.action}</p>
+            </div>
+          )}
+        </section>
+        <section className="panel p-6">
+          <h2 className="mb-3 text-sm">Anomaly detection</h2>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Flag observed readings more than 15% above their baseline. Water: 9,600 L vs 8,000 L → +
+            {anomaly(9600, 8000).change.toFixed(0)}%. Energy: 3,800 kWh vs 2,860 kWh → +
+            {anomaly(3800, 2860).change.toFixed(1)}%. All readings are simulated.
+          </p>
+        </section>
+      </div>
+    </div>
+  );
 }

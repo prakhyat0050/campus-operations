@@ -4,6 +4,8 @@ A campus operations workspace for reporting and tracking maintenance, security, 
 
 Built with TanStack Start, React, TypeScript, Tailwind CSS, Supabase, and Vercel-compatible server rendering.
 
+This project is released under the [MIT License](./LICENSE).
+
 ## Local development
 
 ```sh
@@ -26,6 +28,14 @@ Required environment variables:
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 
 Use the same project URL and publishable key for the server and browser variables. The `VITE_` values are exposed to the browser and must only contain public client configuration. Do not use a Supabase service-role key in a `VITE_` variable.
+
+Optional Gemma 4 features use the Gemini API from the server. Set `GEMINI_API_KEY` and `GEMMA_MODEL` in the server environment to enable them; never prefix the API key with `VITE_`. Features include:
+
+- **Multimodal maintenance reporting:** on request, analyze a report description and attached photo to suggest a title, category, priority, and factual summary.
+- **Grounded campus assistant:** ask questions about available maintenance/community records and simulated campus readings; security records are included only for roles allowed to view them.
+- **Sustainability action planner:** on request, generate evidence-linked actions from the selected building's simulated consumption readings and related maintenance reports. It avoids claiming unverified savings.
+
+Each feature discloses what data is sent before use. Model output is advisory and may be inaccurate; verify recommendations before acting.
 
 Database migrations are in `drizzle/migrations`. Apply the required migrations to the Supabase project before using authenticated data features.
 
